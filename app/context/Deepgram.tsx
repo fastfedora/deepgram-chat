@@ -116,6 +116,24 @@ const voices: {
     language: "English",
     accent: "US",
   },
+  "elevenLabs": {
+    name: "Eleven Labs (default)",
+    avatar: "/aura-zeus-en.svg",
+    language: "English",
+    accent: "US",
+  },
+  "whisper": {
+    name: "Whisper (default)",
+    avatar: "/aura-helios-en.svg",
+    language: "English",
+    accent: "US",
+  },
+  "whisper-shimmer": {
+    name: "Whisper (Shimmer)",
+    avatar: "/aura-orpheus-en.svg",
+    language: "English",
+    accent: "US",
+  },
 };
 
 const voiceMap = (model: string) => {

@@ -1,5 +1,93 @@
 import { Message } from "ai";
 import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
+import { ElevenLabsClient } from "elevenlabs";
+
+const elevenlabs = new ElevenLabsClient();
+const openai = new OpenAI();
+
+type TextToSpeechEngine = "deepgram" | "whisper" | "elevenLabs";
+
+const defaultVoices: Record<TextToSpeechEngine, string> = {
+  deepgram: "aura-asteria-en",
+  whisper: "whisper-alloy",
+  elevenLabs: "elevenLabs-Rachel",
+};
+
+async function convertTextToSpeech(
+  text: string,
+  voice: string,
+): Promise<Buffer | globalThis.ReadableStream<Uint8Array> | null> {
+  voice = defaultVoices[voice as TextToSpeechEngine] ?? voice;
+
+  if (voice.startsWith('aura-')) {
+    return deepgram(text, voice);
+  } else if (voice.startsWith('whisper-')) {
+    return whisper(text, voice.replace("whisper-", "") as OpenAIVoice);
+  } else if (voice.startsWith('elevenLabs-')) {
+    return elevenLabs(text, voice.replace("elevenLabs-", ""));
+  } else {
+    throw new Error(`Invalid voice: ${voice}`);
+  }
+}
+
+async function deepgram(
+  text: string,
+  voice: string,
+): Promise<Buffer | globalThis.ReadableStream<Uint8Array> | null> {
+  const response = await fetch(
+    `${process.env.DEEPGRAM_STT_DOMAIN}/v1/speak?model=${voice}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ text }),
+      headers: {
+        "Content-Type": `application/json`,
+        Authorization: `token ${process.env.DEEPGRAM_API_KEY || ""}`,
+        // "X-DG-Referrer": url,
+      },
+    }
+  );
+
+  return response.body;
+}
+
+type OpenAIVoice = OpenAI.Audio.Speech.SpeechCreateParams["voice"];
+
+async function whisper(
+  text: string,
+  voice: OpenAIVoice,
+): Promise<Buffer | globalThis.ReadableStream<Uint8Array> | null> {
+  const response = await openai.audio.speech.create({
+    model: "tts-1",
+    voice,
+    input: text,
+  });
+
+  return response.body ? Buffer.from(await response.arrayBuffer()) : null;
+}
+
+async function elevenLabs(
+  text: string,
+  voice: string,
+): Promise<Buffer | globalThis.ReadableStream<Uint8Array> | null> {
+  const audio = await elevenlabs.generate({
+    voice,
+    text,
+    model_id: "eleven_multilingual_v2"
+  });
+
+  if (!audio) {
+    return null;
+  }
+
+  const chunks: any[] = [];
+
+  for await (const chunk of audio) {
+    chunks.push(chunk);
+  }
+
+  return Buffer.concat(chunks);
+}
 
 /**
  * Return a stream from the API
@@ -11,7 +99,6 @@ export async function POST(req: NextRequest) {
   const url = req.url;
   const model = req.nextUrl.searchParams.get("model") ?? "aura-asteria-en";
   const message: Message = await req.json();
-  const start = Date.now();
 
   let text = message.content;
 
@@ -30,32 +117,20 @@ export async function POST(req: NextRequest) {
       }
     );
 
-  return await fetch(
-    `${process.env.DEEPGRAM_STT_DOMAIN}/v1/speak?model=${model}`,
-    {
-      method: "POST",
-      body: JSON.stringify({ text }),
+  const start = Date.now();
+
+  try {
+    const buffer = await convertTextToSpeech(text, model);
+
+    return new NextResponse(buffer, {
       headers: {
-        "Content-Type": `application/json`,
-        Authorization: `token ${process.env.DEEPGRAM_API_KEY || ""}`,
-        "X-DG-Referrer": url,
-      },
-    }
-  )
-    .then(async (response) => {
-      const headers = new Headers();
-      headers.set("X-DG-Latency", `${Date.now() - start}`);
-      headers.set("Content-Type", "audio/mp3");
-
-      if (!response?.body) {
-        return new NextResponse("Unable to get response from API.", {
-          status: 500,
-        });
+        "Content-Type": "audio/mp3",
+        "X-DG-Latency": `${Date.now() - start}`,
       }
-
-      return new NextResponse(response.body, { headers });
-    })
-    .catch((error: any) => {
-      return new NextResponse(error || error?.message, { status: 500 });
     });
+  } catch (error: any) {
+    console.error(error || error?.message);
+
+    return new NextResponse(error || error?.message, { status: 500 });
+  }
 }
