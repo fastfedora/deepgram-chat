@@ -26,6 +26,27 @@ import { MessageMetadata } from "../lib/types";
 import { useMessageData } from "../context/MessageMetadata";
 import { useDeepgram } from "../context/Deepgram";
 
+async function convertTextToSpeechViaServer(
+  message: Message,
+  model: string,
+): Promise<{
+  audio: Blob,
+  latency: number,
+}> {
+  const res = await fetch(`/api/speak?model=${model}`, {
+    cache: "no-store",
+    method: "POST",
+    body: JSON.stringify(message),
+  });
+
+  const headers = res.headers;
+
+  return {
+    audio: await res.blob(),
+    latency: Number(headers.get("X-DG-Latency")),
+  };
+}
+
 /**
  * Conversation element that contains the conversational AI app.
  * @returns {JSX.Element}
@@ -79,19 +100,12 @@ export default function Conversation(): JSX.Element {
     async (message: Message) => {
       const start = Date.now();
       const model = ttsOptions?.model ?? "aura-asteria-en";
-
-      const res = await fetch(`/api/speak?model=${model}`, {
-        cache: "no-store",
-        method: "POST",
-        body: JSON.stringify(message),
-      });
-
-      const headers = res.headers;
+      const { audio, latency } = await convertTextToSpeechViaServer(message, model);
 
       enqueueItem({
         id: message.id,
-        blob: await res.blob(),
-        latency: Number(headers.get("X-DG-Latency")) ?? Date.now() - start,
+        blob: audio,
+        latency: latency ?? Date.now() - start,
         networkLatency: Date.now() - start,
         played: false,
         model,
