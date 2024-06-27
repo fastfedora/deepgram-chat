@@ -26,6 +26,8 @@ import { MessageMetadata } from "../lib/types";
 import { useMessageData } from "../context/MessageMetadata";
 import { useDeepgram } from "../context/Deepgram";
 
+const VAD_DELAY = 3000;
+
 async function convertTextToSpeechViaServer(
   message: Message,
   model: string,
@@ -314,7 +316,7 @@ export default function Conversation(): JSX.Element {
     const interval = setInterval(() => {
       const timeLived = Date.now() - lastUtterance;
 
-      if (currentUtterance !== "" && timeLived > 1500) {
+      if (currentUtterance !== "" && timeLived > VAD_DELAY) {
         console.log("failsafe fires! pew pew!!");
 
         append({
