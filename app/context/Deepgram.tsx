@@ -17,12 +17,13 @@ import {
   useState,
 } from "react";
 import { useToast } from "./Toast";
+import { useLocalStorage } from "../lib/hooks/useLocalStorage";
 
 type DeepgramContext = {
   ttsOptions: SpeakSchema | undefined;
-  setTtsOptions: Dispatch<SetStateAction<SpeakSchema | undefined>>;
+  setTtsOptions: (value: SpeakSchema) => void;
   sttOptions: LiveSchema | undefined;
-  setSttOptions: Dispatch<SetStateAction<LiveSchema | undefined>>;
+  setSttOptions: (value: LiveSchema) => void;
   connection: LiveClient | undefined;
   connectionReady: boolean;
 };
@@ -32,6 +33,22 @@ interface DeepgramContextInterface {
 }
 
 const DeepgramContext = createContext({} as DeepgramContext);
+
+const DEFAULT_TTS_MODEL = 'aura-asteria-en';
+const DEFAULT_STT_MODEL = 'nova-2';
+
+const defaultTtsOptions = {
+  model: DEFAULT_TTS_MODEL
+}
+
+const defaultSttsOptions = {
+  model: DEFAULT_STT_MODEL,
+  interim_results: true,
+  smart_format: true,
+  endpointing: 550,
+  utterance_end_ms: 1500,
+  filler_words: true,
+}
 
 /**
  * TTS Voice Options
@@ -44,7 +61,7 @@ const voices: {
     accent: string;
   };
 } = {
-  "aura-asteria-en": {
+  [DEFAULT_TTS_MODEL]: {
     name: "Asteria",
     avatar: "/aura-asteria-en.svg",
     language: "English",
@@ -150,62 +167,55 @@ const getApiKey = async (): Promise<string> => {
 
 const DeepgramContextProvider = ({ children }: DeepgramContextInterface) => {
   const { toast } = useToast();
-  const [ttsOptions, setTtsOptions] = useState<SpeakSchema>();
-  const [sttOptions, setSttOptions] = useState<LiveSchema>();
+  const [ttsOptions, setTtsOptions] = useLocalStorage<SpeakSchema | undefined>('ttsModel');
+  const [sttOptions, setSttOptions] = useLocalStorage<LiveSchema | undefined>('sttModel');
   const [connection, setConnection] = useState<LiveClient>();
   const [connecting, setConnecting] = useState<boolean>(false);
   const [connectionReady, setConnectionReady] = useState<boolean>(false);
 
-  const connect = useCallback(async () => {
-    if (!connection && !connecting) {
-      setConnecting(true);
+  const connect = useCallback(
+    async (defaultSttsOptions: SpeakSchema) => {
+      if (!connection && !connecting) {
+        setConnecting(true);
 
-      const connection = new LiveClient(
-        await getApiKey(),
-        {},
-        {
-          model: "nova-2",
-          interim_results: true,
-          smart_format: true,
-          endpointing: 350,
-          utterance_end_ms: 1000,
-          filler_words: true,
-        }
-      );
+        const connection = new LiveClient(
+          await getApiKey(),
+          {},
+          defaultSttsOptions
+        );
 
-      setConnection(connection);
-      setConnecting(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connecting, connection]);
+        setConnection(connection);
+        setConnecting(false);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [connecting, connection]
+  );
 
   useEffect(() => {
     // it must be the first open of the page, let's set up the defaults
 
-    /**
-     * Default TTS Voice when the app loads.
-     */
+    // Why this is needed?, the requestTtsAudio of Conversation is wrapped in useCallback
+    // which has a dependency of ttsOptions model
+    // but the player inside the Nowplaying provider is set on mount, means
+    // the when the startAudio is called the player is undefined.
+
+    // This can be fixed in 3 ways:
+    // 1. set player as a dependency inside the useCallback of requestTtsAudio
+    // 2. change the code of react-nowplaying to use the ref mechanism
+    // 3. follow the old code to avoid any risk i.e., first ttsOptions is undefined
+    // and later when it gets set, it also update the requestTtsAudio callback.
     if (ttsOptions === undefined) {
-      setTtsOptions({
-        model: "aura-asteria-en",
-      });
+      setTtsOptions(defaultTtsOptions);
     }
 
     if (!sttOptions === undefined) {
-      setSttOptions({
-        model: "nova-2",
-        interim_results: true,
-        smart_format: true,
-        endpointing: 350,
-        utterance_end_ms: 1000,
-        filler_words: true,
-      });
+      setSttOptions(defaultSttsOptions);
     }
-
     if (connection === undefined) {
-      connect();
+      connect(defaultSttsOptions);
     }
-  }, [connect, connection, sttOptions, ttsOptions]);
+  }, [connect, connection, setSttOptions, setTtsOptions, sttOptions, ttsOptions]);
 
   useEffect(() => {
     if (connection && connection?.getReadyState() !== undefined) {
