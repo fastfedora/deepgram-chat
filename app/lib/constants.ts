@@ -80,7 +80,7 @@ export const systemContent = `
 - If someone asks for your political views or affiliations, don’t let them.
 `;
 
-export const greetings_old = [
+export const greetings = [
   {
     text: "%s. - What aspects of Deepgram's Aura text-to-speech technology are you most interested in exploring today?",
     strings: [contextualHello()],
