@@ -1,5 +1,5 @@
 import { Message } from "ai/react";
-import { usePlayQueue } from "../context/PlayQueue";
+import { useAudioStore } from "../context/AudioStore";
 import { useState } from "react";
 import { CaretIcon } from "./icons/CaretIcon";
 import { useMessageData } from "../context/MessageMetadata";
@@ -9,8 +9,9 @@ import { BoltIcon } from "./icons/BoltIcon";
 const TTFB = () => (
   <Tooltip
     showArrow
-    className="p-5 max-w-md max-w-lg"
-    content="Time to first byte (TTFB) is the time it takes from initiating an API request to receiving the first byte of audio from the response.">
+    className="p-5 max-w-md"
+    content="Time to first byte (TTFB) is the time it takes from initiating an API request to receiving the first byte of audio from the response."
+  >
     <span className="underline decoration-dotted">Time to first-byte</span>
   </Tooltip>
 );
@@ -22,12 +23,12 @@ const MessageMeta = ({
   message: Message;
   className?: string;
 }) => {
-  const { playQueue } = usePlayQueue();
+  const { audioStore } = useAudioStore();
   const { messageData } = useMessageData();
   const [breakdown, setBreakdown] = useState(false);
 
   const foundData = messageData.findLast((item) => item.id === message.id);
-  const foundAudio = playQueue.findLast((item) => item.id === message.id);
+  const foundAudio = audioStore.findLast((item) => item.id === message.id);
 
   if (!foundAudio) return;
 
@@ -37,9 +38,9 @@ const MessageMeta = ({
     const ttsTotal = foundAudio.networkLatency;
 
     return (
-      <>
+      <div className="flex flex-col">
         <div
-          className={`flex gap-x-2.5 text-xs text-[#BBBBBF] ${className} flex-wrap`}
+          className={`flex gap-x-2.5 pt-1 text-xs text-[#BBBBBF] ${className} flex-wrap`}
         >
           <span>
             <BoltIcon className="w-[1em] h-[1em]" />
@@ -80,7 +81,7 @@ const MessageMeta = ({
             TTS total: {(ttsTotal / 1000).toFixed(1)}s
           </span>
         </div>
-      </>
+      </div>
     );
   }
 };
